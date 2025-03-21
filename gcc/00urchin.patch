@@ -48,7 +48,7 @@ index a3566f5c7..f7a2622f4 100644
  case ${target} in
  *-linux-musl*)
  	tmake_file="${tmake_file} t-musl"
-+*-linux-musl*)
++*-linux-urchin*)
 +	tmake_file="${tmake_file} t-urchin"
  	;;
  *-linux-uclibc*)
