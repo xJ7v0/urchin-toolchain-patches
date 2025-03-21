@@ -13,7 +13,7 @@ index df90720b7..bde9b7883 100755
  	#  THEN create a no-op fixer and exit
  	(echo "#! /bin/sh" ; echo "exit 0" ) > ${target}
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index a3566f5c7..f7a2622f4 100644
+index a3566f5c7..78e3dfa3e 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
 @@ -693,7 +693,7 @@ case ${target} in
@@ -44,16 +44,17 @@ index a3566f5c7..f7a2622f4 100644
  	esac
  	if test x${enable_secureplt} = xyes; then
  		tm_file="rs6000/secureplt.h ${tm_file}"
-@@ -3640,6 +3645,8 @@ esac
- case ${target} in
+@@ -3641,6 +3646,9 @@ case ${target} in
  *-linux-musl*)
  	tmake_file="${tmake_file} t-musl"
+ 	;;
 +*-linux-urchin*)
 +	tmake_file="${tmake_file} t-urchin"
- 	;;
++	;;
  *-linux-uclibc*)
  	tmake_file="${tmake_file} t-uclibc"
-@@ -3649,7 +3656,7 @@ esac
+ 	;;
+@@ -3649,7 +3657,7 @@ esac
  # Assume the existence of indirect function support and allow the use of the
  # resolver attribute.
  case ${target} in
@@ -62,7 +63,7 @@ index a3566f5c7..f7a2622f4 100644
          ;;
  *-*-kfreebsd*-gnu | *-*-kopensolaris*-gnu)
          ;;
-@@ -5064,6 +5071,7 @@ case "${target}" in
+@@ -5064,6 +5072,7 @@ case "${target}" in
  		case ${target} in
  		  *-linux-gnu*) triplet_os="linux-gnu";;
  		  *-linux-musl*) triplet_os="linux-musl";;
