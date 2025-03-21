@@ -1,0 +1,666 @@
+diff --git a/fixincludes/mkfixinc.sh b/fixincludes/mkfixinc.sh
+index df90720b7..bde9b7883 100755
+--- a/fixincludes/mkfixinc.sh
++++ b/fixincludes/mkfixinc.sh
+@@ -20,7 +20,8 @@ case $machine in
+     powerpcle-*-eabisim* | \
+     powerpcle-*-eabi* | \
+     *-*-vxworks7* | \
+-    *-musl* )
++    *-musl* | \
++    *-urchin*)
+ 	#  IF there is no include fixing,
+ 	#  THEN create a no-op fixer and exit
+ 	(echo "#! /bin/sh" ; echo "exit 0" ) > ${target}
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index a3566f5c7..f7a2622f4 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -693,7 +693,7 @@ case ${target} in
+ esac
+ 
+ # Common C libraries.
+-tm_defines="$tm_defines LIBC_GLIBC=1 LIBC_UCLIBC=2 LIBC_BIONIC=3 LIBC_MUSL=4"
++tm_defines="$tm_defines LIBC_GLIBC=1 LIBC_UCLIBC=2 LIBC_BIONIC=3 LIBC_MUSL=4 LIBC_URCHIN=5"
+ 
+ # 32-bit x86 processors supported by --with-arch=.  Each processor
+ # MUST be separated by exactly one space.
+@@ -919,6 +919,9 @@ case ${target} in
+     *-*-*musl*)
+       tm_defines="$tm_defines DEFAULT_LIBC=LIBC_MUSL"
+       ;;
++    *-*-*urchin*)
++      tm_defines="$tm_defines DEFAULT_LIBC=LIBC_URCHIN"
++      ;;
+     *)
+       tm_defines="$tm_defines DEFAULT_LIBC=LIBC_GLIBC"
+       ;;
+@@ -3102,6 +3105,8 @@ powerpc*-*-linux*)
+ 	case ${target} in
+ 	    *-linux*-musl*)
+ 		enable_secureplt=yes ;;
++	    *-linux*-urchin*)
++		enable_secureplt=yes ;;
+ 	esac
+ 	if test x${enable_secureplt} = xyes; then
+ 		tm_file="rs6000/secureplt.h ${tm_file}"
+@@ -3640,6 +3645,8 @@ esac
+ case ${target} in
+ *-linux-musl*)
+ 	tmake_file="${tmake_file} t-musl"
++*-linux-musl*)
++	tmake_file="${tmake_file} t-urchin"
+ 	;;
+ *-linux-uclibc*)
+ 	tmake_file="${tmake_file} t-uclibc"
+@@ -3649,7 +3656,7 @@ esac
+ # Assume the existence of indirect function support and allow the use of the
+ # resolver attribute.
+ case ${target} in
+-*-*-linux*android*|*-*-linux*uclibc*|*-*-linux*musl*)
++*-*-linux*android*|*-*-linux*uclibc*|*-*-linux*musl*|*-*-linux*musl*)
+         ;;
+ *-*-kfreebsd*-gnu | *-*-kopensolaris*-gnu)
+         ;;
+@@ -5064,6 +5071,7 @@ case "${target}" in
+ 		case ${target} in
+ 		  *-linux-gnu*) triplet_os="linux-gnu";;
+ 		  *-linux-musl*) triplet_os="linux-musl";;
++		  *-linux-urchin*) triplet_os="linux-urchin";;
+ 		  *-elf*) triplet_os="elf";;
+ 		  *)
+ 			  echo "Unsupported target ${target}." 1>&2
+diff --git a/gcc/config/aarch64/aarch64-linux.h b/gcc/config/aarch64/aarch64-linux.h
+index 8e51c8202..0cf944bab 100644
+--- a/gcc/config/aarch64/aarch64-linux.h
++++ b/gcc/config/aarch64/aarch64-linux.h
+@@ -26,6 +26,9 @@
+ #undef MUSL_DYNAMIC_LINKER
+ #define MUSL_DYNAMIC_LINKER "/lib/ld-musl-aarch64%{mbig-endian:_be}%{mabi=ilp32:_ilp32}.so.1"
+ 
++#undef URCHIN_DYNAMIC_LINKER
++#define URCHIN_DYNAMIC_LINKER "/lib/ld-urchin-aarch64%{mbig-endian:_be}%{mabi=ilp32:_ilp32}.so.1"
++
+ #undef  ASAN_CC1_SPEC
+ #define ASAN_CC1_SPEC "%{%:sanitize(address):-funwind-tables}"
+ 
+diff --git a/gcc/config/arm/linux-eabi.h b/gcc/config/arm/linux-eabi.h
+index eef791f6a..8a8e26f1e 100644
+--- a/gcc/config/arm/linux-eabi.h
++++ b/gcc/config/arm/linux-eabi.h
+@@ -88,6 +88,23 @@
+ #define MUSL_DYNAMIC_LINKER \
+   "/lib/ld-musl-arm" MUSL_DYNAMIC_LINKER_E "%{mfloat-abi=hard:hf}%{mfdpic:-fdpic}.so.1"
+ 
++/* For ARM urchin currently supports four dynamic linkers:
++   - ld-urchin-arm.so.1 - for the EABI-derived soft-float ABI
++   - ld-urchin-armhf.so.1 - for the EABI-derived hard-float ABI
++   - ld-urchin-armeb.so.1 - for the EABI-derived soft-float ABI, EB
++   - ld-urchin-armebhf.so.1 - for the EABI-derived hard-float ABI, EB
++   urchin does not support the legacy OABI mode.
++   All the dynamic linkers live in /lib.
++   We default to soft-float, EL. */
++#undef  URCHIN_DYNAMIC_LINKER
++#if TARGET_BIG_ENDIAN_DEFAULT
++#define URCHIN_DYNAMIC_LINKER_E "%{mlittle-endian:;:eb}"
++#else
++#define URCHIN_DYNAMIC_LINKER_E "%{mbig-endian:eb}"
++#endif
++#define URCHIN_DYNAMIC_LINKER \
++  "/lib/ld-urchin-arm" URCHIN_DYNAMIC_LINKER_E "%{mfloat-abi=hard:hf}%{mfdpic:-fdpic}.so.1"
++
+ /* At this point, bpabi.h will have clobbered LINK_SPEC.  We want to
+    use the GNU/Linux version, not the generic BPABI version.  */
+ #undef  LINK_SPEC
+diff --git a/gcc/config/fuchsia.h b/gcc/config/fuchsia.h
+index 16fc82188..0db23999d 100644
+--- a/gcc/config/fuchsia.h
++++ b/gcc/config/fuchsia.h
+@@ -55,6 +55,12 @@ along with GCC; see the file COPYING3.  If not see
+ #undef  OPTION_MUSL_P
+ #define OPTION_MUSL_P(opts) 1
+ 
++/* We are using Urchin as our libc.  */
++#undef  OPTION_URCHIN
++#define OPTION_URCHIN 1
++#undef  OPTION_URCHIN_P
++#define OPTION_URCHIN_P(opts) 1
++
+ #ifndef TARGET_SUB_OS_CPP_BUILTINS
+ #define TARGET_SUB_OS_CPP_BUILTINS()
+ #endif
+diff --git a/gcc/config/glibc-stdint.h b/gcc/config/glibc-stdint.h
+index 5386288c1..ad68d9c58 100644
+--- a/gcc/config/glibc-stdint.h
++++ b/gcc/config/glibc-stdint.h
+@@ -22,7 +22,7 @@ a copy of the GCC Runtime Library Exception along with this program;
+ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ <http://www.gnu.org/licenses/>.  */
+ 
+-/* Systems using musl libc should use this header and make sure
++/* Systems using musl or urchin libc should use this header and make sure
+    OPTION_MUSL is defined correctly before using the TYPE macros. */
+ #ifndef OPTION_MUSL
+ #define OPTION_MUSL 0
+@@ -31,6 +31,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define OPTION_MUSL_P(opts) 0
+ #endif
+ 
++#ifndef OPTION_MUSL
++#define OPTION_URCHIN 0
++#endif
++#ifndef OPTION_URCHIN_P
++#define OPTION_URCHIN_P(opts) 0
++#endif
++
+ #define SIG_ATOMIC_TYPE "int"
+ 
+ #define INT8_TYPE "signed char"
+@@ -52,12 +59,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define UINT_LEAST64_TYPE (LONG_TYPE_SIZE == 64 ? "long unsigned int" : "long long unsigned int")
+ 
+ #define INT_FAST8_TYPE "signed char"
+-#define INT_FAST16_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL ? "long int" : "int")
+-#define INT_FAST32_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL ? "long int" : "int")
++#define INT_FAST16_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL && !OPTION_URCHIN ? "long int" : "int")
++#define INT_FAST32_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL && !OPTION_URCHIN ? "long int" : "int")
+ #define INT_FAST64_TYPE (LONG_TYPE_SIZE == 64 ? "long int" : "long long int")
+ #define UINT_FAST8_TYPE "unsigned char"
+-#define UINT_FAST16_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL ? "long unsigned int" : "unsigned int")
+-#define UINT_FAST32_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL ? "long unsigned int" : "unsigned int")
++#define UINT_FAST16_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL && !OPTION_URCHIN ? "long unsigned int" : "unsigned int")
++#define UINT_FAST32_TYPE (LONG_TYPE_SIZE == 64 && !OPTION_MUSL && !OPTION_URCHIN ? "long unsigned int" : "unsigned int")
+ #define UINT_FAST64_TYPE (LONG_TYPE_SIZE == 64 ? "long unsigned int" : "long long unsigned int")
+ 
+ #define INTPTR_TYPE (LONG_TYPE_SIZE == 64 ? "long int" : "int")
+diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
+index 20a96d56e..2b7e8a191 100644
+--- a/gcc/config/i386/linux.h
++++ b/gcc/config/i386/linux.h
+@@ -24,3 +24,6 @@ along with GCC; see the file COPYING3.  If not see
+ 
+ #undef MUSL_DYNAMIC_LINKER
+ #define MUSL_DYNAMIC_LINKER "/lib/ld-musl-i386.so.1"
++
++#undef URCHIN_DYNAMIC_LINKER
++#define URCHIN_DYNAMIC_LINKER "/lib/ld-urchin-i386.so.1"
+diff --git a/gcc/config/i386/linux64.h b/gcc/config/i386/linux64.h
+index 3dd23eef5..c0e24d9a3 100644
+--- a/gcc/config/i386/linux64.h
++++ b/gcc/config/i386/linux64.h
+@@ -37,3 +37,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define MUSL_DYNAMIC_LINKER64 "/lib/ld-musl-x86_64.so.1"
+ #undef MUSL_DYNAMIC_LINKERX32
+ #define MUSL_DYNAMIC_LINKERX32 "/lib/ld-musl-x32.so.1"
++
++#undef URCHIN_DYNAMIC_LINKER32
++#define URCHIN_DYNAMIC_LINKER32 "/lib/ld-urchin-i386.so.1"
++#undef URCHIN_DYNAMIC_LINKER64
++#define URCHIN_DYNAMIC_LINKER64 "/lib/ld-urchin-x86_64.so.1"
++#undef URCHIN_DYNAMIC_LINKERX32
++#define URCHIN_DYNAMIC_LINKERX32 "/lib/ld-urchin-x32.so.1"
+diff --git a/gcc/config/linux-d.cc b/gcc/config/linux-d.cc
+index 96040411a..03557d145 100644
+--- a/gcc/config/linux-d.cc
++++ b/gcc/config/linux-d.cc
+@@ -44,6 +44,8 @@ linux_d_os_builtins (void)
+     d_add_builtin_version ("CRuntime_Bionic");
+   else if (OPTION_MUSL)
+     d_add_builtin_version ("CRuntime_Musl");
++  else if (OPTION_URCHIN)
++    d_add_builtin_version ("CRuntime_Musl");	// too lazy to fix and make it urchin specific
+ }
+ 
+ /* Handle a call to `__traits(getTargetInfo, "objectFormat")'.  */
+diff --git a/gcc/config/linux-rust.cc b/gcc/config/linux-rust.cc
+index 65add8a5c..fa9b5acac 100644
+--- a/gcc/config/linux-rust.cc
++++ b/gcc/config/linux-rust.cc
+@@ -45,6 +45,8 @@ linux_rust_target_os_info (void)
+     rust_add_target_info ("target_env", "gnu");
+   else if (OPTION_MUSL)
+     rust_add_target_info ("target_env", "musl");
++  else if (OPTION_URCHIN)
++    rust_add_target_info ("target_env", "urchin");
+   else if (OPTION_UCLIBC)
+     rust_add_target_info ("target_env", "uclibc");
+   else
+diff --git a/gcc/config/linux.cc b/gcc/config/linux.cc
+index e38361cde..976674fcf 100644
+--- a/gcc/config/linux.cc
++++ b/gcc/config/linux.cc
+@@ -30,7 +30,7 @@ bool
+ linux_libc_has_function (enum function_class fn_class,
+ 			 tree type ATTRIBUTE_UNUSED)
+ {
+-  if (OPTION_GLIBC || OPTION_MUSL)
++  if (OPTION_GLIBC || OPTION_MUSL || OPTION_URCHIN)
+     return true;
+   if (OPTION_BIONIC)
+     if (fn_class == function_c94
+diff --git a/gcc/config/linux.h b/gcc/config/linux.h
+index a7248ac90..438abd3ca 100644
+--- a/gcc/config/linux.h
++++ b/gcc/config/linux.h
+@@ -33,19 +33,25 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define OPTION_UCLIBC_P(opts)	(DEFAULT_LIBC == LIBC_UCLIBC)
+ #define OPTION_BIONIC_P(opts)	(DEFAULT_LIBC == LIBC_BIONIC)
+ #undef OPTION_MUSL_P
++#undef OPTION_URCHIN_P
+ #define OPTION_MUSL_P(opts)	(DEFAULT_LIBC == LIBC_MUSL)
++#define OPTION_URCHIN_P(opts)	(DEFAULT_LIBC == LIBC_URCHIN)
+ #else
+ #define OPTION_GLIBC_P(opts)	((opts)->x_linux_libc == LIBC_GLIBC)
+ #define OPTION_UCLIBC_P(opts)	((opts)->x_linux_libc == LIBC_UCLIBC)
+ #define OPTION_BIONIC_P(opts)	((opts)->x_linux_libc == LIBC_BIONIC)
+ #undef OPTION_MUSL_P
++#undef OPTION_URCHINL_P
+ #define OPTION_MUSL_P(opts)	((opts)->x_linux_libc == LIBC_MUSL)
++#define OPTION_URCHIN_P(opts)	((opts)->x_linux_libc == LIBC_URCHIN)
+ #endif
+ #define OPTION_GLIBC		OPTION_GLIBC_P (&global_options)
+ #define OPTION_UCLIBC		OPTION_UCLIBC_P (&global_options)
+ #define OPTION_BIONIC		OPTION_BIONIC_P (&global_options)
+ #undef OPTION_MUSL
++#undef OPTION_URCHIN
+ #define OPTION_MUSL		OPTION_MUSL_P (&global_options)
++#define OPTION_URCHIN		OPTION_URCHIN_P (&global_options)
+ 
+ #define GNU_USER_TARGET_OS_CPP_BUILTINS()			\
+     do {							\
+@@ -59,25 +65,28 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+     } while (0)
+ 
+ /* Determine which dynamic linker to use depending on whether GLIBC or
+-   uClibc or Bionic or musl is the default C library and whether
++   uClibc or Bionic or musl or urchin is the default C library and whether
+    -muclibc or -mglibc or -mbionic or -mmusl has been passed to change
+    the default.  */
+ 
+-#define CHOOSE_DYNAMIC_LINKER1(LIBC1, LIBC2, LIBC3, LIBC4, LD1, LD2, LD3, LD4)	\
+-  "%{" LIBC2 ":" LD2 ";:%{" LIBC3 ":" LD3 ";:%{" LIBC4 ":" LD4 ";:" LD1 "}}}"
++#define CHOOSE_DYNAMIC_LINKER1(LIBC1, LIBC2, LIBC3, LIBC4, LIBC5, LD1, LD2, LD3, LD4, LD5)	\
++  "%{" LIBC2 ":" LD2 ";:%{" LIBC3 ":" LD3 ";:%{" LIBC4 ":" LD4 ";:%{" LIBC5 ":" LD5 ";:" LD1 "}}}}"
+ 
+ #if DEFAULT_LIBC == LIBC_GLIBC
+-#define CHOOSE_DYNAMIC_LINKER(G, U, B, M) \
+-  CHOOSE_DYNAMIC_LINKER1 ("mglibc", "muclibc", "mbionic", "mmusl", G, U, B, M)
++#define CHOOSE_DYNAMIC_LINKER(G, U, B, M, UR) \
++  CHOOSE_DYNAMIC_LINKER1 ("mglibc", "muclibc", "mbionic", "mmusl", "murchin", G, U, B, M, UR)
+ #elif DEFAULT_LIBC == LIBC_UCLIBC
+ #define CHOOSE_DYNAMIC_LINKER(G, U, B, M) \
+-  CHOOSE_DYNAMIC_LINKER1 ("muclibc", "mglibc", "mbionic", "mmusl", U, G, B, M)
++  CHOOSE_DYNAMIC_LINKER1 ("muclibc", "mglibc", "mbionic", "mmusl", "murchin", U, G, B, M, UR)
+ #elif DEFAULT_LIBC == LIBC_BIONIC
+ #define CHOOSE_DYNAMIC_LINKER(G, U, B, M) \
+-  CHOOSE_DYNAMIC_LINKER1 ("mbionic", "mglibc", "muclibc", "mmusl", B, G, U, M)
++  CHOOSE_DYNAMIC_LINKER1 ("mbionic", "mglibc", "muclibc", "mmusl", "murchin", B, G, U, M, UR)
+ #elif DEFAULT_LIBC == LIBC_MUSL
+ #define CHOOSE_DYNAMIC_LINKER(G, U, B, M) \
+-  CHOOSE_DYNAMIC_LINKER1 ("mmusl", "mglibc", "muclibc", "mbionic", M, G, U, B)
++  CHOOSE_DYNAMIC_LINKER1 ("mmusl", "mglibc", "muclibc", "mbionic", "murchin", M, G, U, B, UR)
++#elif DEFAULT_LIBC == LIBC_URCHIN
++#define CHOOSE_DYNAMIC_LINKER(G, U, B, M) \
++  CHOOSE_DYNAMIC_LINKER1 ("murchin", "mglibc", "muclibc", "mbionic", "mmusl",  UR, G, U, B, M)
+ #else
+ #error "Unsupported DEFAULT_LIBC"
+ #endif /* DEFAULT_LIBC */
+diff --git a/gcc/config/linux.opt b/gcc/config/linux.opt
+index 31f334e9b..b3621dcb8 100644
+--- a/gcc/config/linux.opt
++++ b/gcc/config/linux.opt
+@@ -32,5 +32,9 @@ Target RejectNegative Var(linux_libc,LIBC_UCLIBC) Negative(mmusl)
+ Use uClibc C library.
+ 
+ mmusl
+-Target RejectNegative Var(linux_libc,LIBC_MUSL) Negative(mbionic)
++Target RejectNegative Var(linux_libc,LIBC_MUSL) Negative(murchin)
++Use musl C library.
++
++murchin
++Target RejectNegative Var(linux_libc,LIBC_URCHIN) Negative(mbionic)
+ Use musl C library.
+diff --git a/gcc/config/t-urchin b/gcc/config/t-urchin
+new file mode 100644
+index 000000000..ad3e95ab6
+--- /dev/null
++++ b/gcc/config/t-urchin
+@@ -0,0 +1,2 @@
++MULTIARCH_DIRNAME := $(subst -linux-gnu,-linux-urchin,$(MULTIARCH_DIRNAME))
++MULTILIB_OSDIRNAMES := $(subst -linux-gnu,-linux-urchin,$(MULTILIB_OSDIRNAMES))
+diff --git a/gcc/configure b/gcc/configure
+index abc8bfdc2..be50a5f95 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -33397,8 +33397,8 @@ else
+     gcc_cv_libc_provides_ssp=no
+   else
+     case "$target" in
+-       *-*-musl*)
+-	 # All versions of musl provide stack protector
++       *-*-musl*| *-*-urchin*)
++	 # All versions of musl/urchin provide stack protector
+ 	 gcc_cv_libc_provides_ssp=yes;;
+        *-*-linux* | *-*-kfreebsd*-gnu)
+       # glibc 2.4 and later provides __stack_chk_fail and
+@@ -33432,7 +33432,7 @@ fi
+ 	 # <http://gcc.gnu.org/ml/gcc/2008-10/msg00130.html>) and for now
+ 	 # simply assert that glibc does provide this, which is true for all
+ 	 # realistically usable GNU/Hurd configurations.
+-	 # All supported versions of musl provide it as well
++	 # All supported versions of musl/urchin provide it as well
+ 	 gcc_cv_libc_provides_ssp=yes;;
+        *-*-darwin* | *-*-freebsd* | *-*-netbsd*)
+ 	 ac_fn_cxx_check_func "$LINENO" "__stack_chk_fail" "ac_cv_func___stack_chk_fail"
+@@ -33518,10 +33518,10 @@ if test "${with_long_double_128+set}" = set; then :
+ else
+ 
+       case "$target" in
+-	s390*-*-linux-musl*)
++	s390*-*-linux-musl*|s390*-*-linux-urchin*)
+ 	  gcc_cv_target_ldbl128=yes
+ 	  ;;
+-	powerpc*-*-linux-musl*)
++	powerpc*-*-linux-musl*|powerpc*-*-linux-urchin*)
+ 	  gcc_cv_target_ldbl128=no
+ 	  ;;
+ 	*)
+@@ -33611,7 +33611,7 @@ fi
+ # Check if the target LIBC handles PT_GNU_STACK.
+ gcc_cv_libc_gnustack=unknown
+ case "$target" in
+-  mips*-*-linux-musl*)
++  mips*-*-linux-musl*|mips*-*-linux-urchin*)
+     gcc_cv_libc_gnustack=yes
+     ;;
+   mips*-*-linux*)
+@@ -33649,7 +33649,7 @@ case "$target" in
+       gcc_cv_target_dl_iterate_phdr=no
+     fi
+     ;;
+-  *-linux-musl*)
++  *-linux-musl*|*-linux-urchin*)
+     gcc_cv_target_dl_iterate_phdr=yes
+     ;;
+ esac
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index 1d2cefa3f..1a3516897 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -6973,8 +6973,8 @@ AC_CACHE_CHECK(__stack_chk_fail in target C library,
+     gcc_cv_libc_provides_ssp=no
+   else
+     case "$target" in
+-       *-*-musl*)
+-	 # All versions of musl provide stack protector
++       *-*-musl*|*-*-urchin*)
++	 # All versions of musl/urchin provide stack protector
+ 	 gcc_cv_libc_provides_ssp=yes;;
+        *-*-linux* | *-*-kfreebsd*-gnu)
+       # glibc 2.4 and later provides __stack_chk_fail and
+@@ -7002,7 +7002,7 @@ AC_CACHE_CHECK(__stack_chk_fail in target C library,
+ 	 # <http://gcc.gnu.org/ml/gcc/2008-10/msg00130.html>) and for now
+ 	 # simply assert that glibc does provide this, which is true for all
+ 	 # realistically usable GNU/Hurd configurations.
+-	 # All supported versions of musl provide it as well
++	 # All supported versions of musl/urchin provide it as well
+ 	 gcc_cv_libc_provides_ssp=yes;;
+        *-*-darwin* | *-*-freebsd* | *-*-netbsd*)
+ 	 AC_CHECK_FUNC(__stack_chk_fail,[gcc_cv_libc_provides_ssp=yes],
+@@ -7062,10 +7062,10 @@ case "$target" in
+ 		      [use 128-bit long double by default])],
+       gcc_cv_target_ldbl128="$with_long_double_128", [
+       case "$target" in
+-	s390*-*-linux-musl*)
++	s390*-*-linux-musl*|s390*-*-linux-urchin*)
+ 	  gcc_cv_target_ldbl128=yes
+ 	  ;;
+-	powerpc*-*-linux-musl*)
++	powerpc*-*-linux-musl*|powerpc*-*-linux-urchin*)
+ 	  gcc_cv_target_ldbl128=no
+ 	  ;;
+ 	*)]
+@@ -7139,7 +7139,7 @@ fi
+ # Check if the target LIBC handles PT_GNU_STACK.
+ gcc_cv_libc_gnustack=unknown
+ case "$target" in
+-  mips*-*-linux-musl*)
++  mips*-*-linux-musl*|mips*-*-linux-urchin*)
+     gcc_cv_libc_gnustack=yes
+     ;;
+   mips*-*-linux*)
+@@ -7171,7 +7171,7 @@ case "$target" in
+       gcc_cv_target_dl_iterate_phdr=no
+     fi
+     ;;
+-  *-linux-musl*)
++  *-linux-musl*|*-linux-urchin*)
+     gcc_cv_target_dl_iterate_phdr=yes
+     ;;
+ esac
+diff --git a/gcc/doc/install.texi b/gcc/doc/install.texi
+index 89e2c642f..1f4a30f66 100644
+--- a/gcc/doc/install.texi
++++ b/gcc/doc/install.texi
+@@ -843,7 +843,7 @@ aix@var{version}, amdhsa, aout, cygwin, darwin@var{version},
+ eabi, eabialtivec, eabisim, eabisimaltivec, elf, elf32,
+ elfbare, elfoabi, freebsd@var{version}, gnu, hpux, hpux@var{version},
+ kfreebsd-gnu, kopensolaris-gnu, linux-androideabi, linux-gnu,
+-linux-gnu_altivec, linux-musl, linux-uclibc, lynxos, mingw32, mingw32crt,
++linux-gnu_altivec, linux-musl, linux-urchin, linux-uclibc, lynxos, mingw32, mingw32crt,
+ mmixware, msdosdjgpp, netbsd, netbsdelf@var{version}, nto-qnx, openbsd,
+ rtems, solaris@var{version}, symbianelf, tpf, uclinux, uclinux_eabi, vms,
+ vxworks, vxworksae, vxworksmils
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index b14ad30cd..7f9646a7a 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -999,7 +999,7 @@ Objective-C and Objective-C++ Dialects}.
+ -mcpu=@var{cpu}}
+ 
+ @emph{GNU/Linux Options}
+-@gccoptlist{-mglibc  -muclibc  -mmusl  -mbionic  -mandroid
++@gccoptlist{-mglibc  -muclibc  -mmusl  -murchin  -mbionic  -mandroid
+ -tno-android-cc  -tno-android-ld}
+ 
+ @emph{H8/300 Options}
+@@ -26166,7 +26166,7 @@ These @samp{-m} options are defined for GNU/Linux targets:
+ @opindex mglibc
+ @item -mglibc
+ Use the GNU C library.  This is the default except
+-on @samp{*-*-linux-*uclibc*}, @samp{*-*-linux-*musl*} and
++on @samp{*-*-linux-*uclibc*}, @samp{*-*-linux-*musl*}, @samp{*-*-linux-*urchin*}  and
+ @samp{*-*-linux-*android*} targets.
+ 
+ @opindex muclibc
+@@ -26179,6 +26179,11 @@ Use uClibc C library.  This is the default on
+ Use the musl C library.  This is the default on
+ @samp{*-*-linux-*musl*} targets.
+ 
++@opindex murchin
++@item -murchin
++Use the urchin C library.  This is the default on
++@samp{*-*-linux-*urchin*} targets.
++
+ @opindex mbionic
+ @item -mbionic
+ Use Bionic C library.  This is the default on
+diff --git a/gcc/ginclude/stddef.h b/gcc/ginclude/stddef.h
+index 349213108..f2fb9b9df 100644
+--- a/gcc/ginclude/stddef.h
++++ b/gcc/ginclude/stddef.h
+@@ -128,7 +128,7 @@ _TYPE_wchar_t;
+ #ifndef ___int_ptrdiff_t_h
+ #ifndef _GCC_PTRDIFF_T
+ #ifndef _PTRDIFF_T_DECLARED /* DragonFly */
+-#ifndef __DEFINED_ptrdiff_t /* musl libc */
++#ifndef __DEFINED_ptrdiff_t /* musl/urchin libc */
+ #define _PTRDIFF_T
+ #define _T_PTRDIFF_
+ #define _T_PTRDIFF
+@@ -177,7 +177,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
+ #ifndef _SIZE_T_DEFINED
+ #ifndef _BSD_SIZE_T_DEFINED_	/* Darwin */
+ #ifndef _SIZE_T_DECLARED	/* FreeBSD 5 */
+-#ifndef __DEFINED_size_t	/* musl libc */
++#ifndef __DEFINED_size_t	/* musl/urchin libc */
+ #ifndef ___int_size_t_h
+ #ifndef _GCC_SIZE_T
+ #ifndef _SIZET_
+@@ -195,7 +195,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
+ #define _SIZE_T_DEFINED
+ #define _BSD_SIZE_T_DEFINED_	/* Darwin */
+ #define _SIZE_T_DECLARED	/* FreeBSD 5 */
+-#define __DEFINED_size_t	/* musl libc */
++#define __DEFINED_size_t	/* musl/urchin libc */
+ #define ___int_size_t_h
+ #define _GCC_SIZE_T
+ #define _SIZET_
+@@ -257,7 +257,7 @@ typedef long ssize_t;
+ #ifndef _BSD_WCHAR_T_DEFINED_    /* Darwin */
+ #ifndef _BSD_RUNE_T_DEFINED_	/* Darwin */
+ #ifndef _WCHAR_T_DECLARED /* FreeBSD 5 */
+-#ifndef __DEFINED_wchar_t /* musl libc */
++#ifndef __DEFINED_wchar_t /* musl/urchin libc */
+ #ifndef _WCHAR_T_DEFINED_
+ #ifndef _WCHAR_T_DEFINED
+ #ifndef _WCHAR_T_H
+diff --git a/libgcc/config.host b/libgcc/config.host
+index 733290370..54f446dba 100644
+--- a/libgcc/config.host
++++ b/libgcc/config.host
+@@ -1581,7 +1581,7 @@ esac
+ case ${host} in
+ i[34567]86-*-* | x86_64-*-*)
+ 	case ${host} in
+-	*-musl*)
++	*-musl*|*-urchin*)
+ 		tmake_file="${tmake_file} i386/t-cpuinfo-static"
+ 		;;
+ 	*)
+@@ -1674,7 +1674,7 @@ vxworks)
+ esac
+ 
+ case ${host} in
+-*-*-musl*)
++*-*-musl*|*-*-urchin*)
+   # The gthr weak references are unsafe with static linking
+   tmake_file="$tmake_file t-gthr-noweak"
+   ;;
+diff --git a/libgfortran/acinclude.m4 b/libgfortran/acinclude.m4
+index a73207e54..cd87089ea 100644
+--- a/libgfortran/acinclude.m4
++++ b/libgfortran/acinclude.m4
+@@ -88,7 +88,7 @@ void foo (void);
+ 	      [Define to 1 if the target supports #pragma weak])
+   fi
+   case "$host" in
+-    *-*-darwin* | *-*-hpux* | *-*-cygwin* | *-*-mingw* | *-*-musl* )
++    *-*-darwin* | *-*-hpux* | *-*-cygwin* | *-*-mingw* | *-*-musl* | *-*-urchin* )
+       AC_DEFINE(GTHREAD_USE_WEAK, 0,
+ 		[Define to 0 if the target shouldn't use #pragma weak])
+       ;;
+diff --git a/libgfortran/configure b/libgfortran/configure
+index 774dd52fc..67fb3cdfd 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -31053,7 +31053,7 @@ $as_echo "#define SUPPORTS_WEAK 1" >>confdefs.h
+ 
+   fi
+   case "$host" in
+-    *-*-darwin* | *-*-hpux* | *-*-cygwin* | *-*-mingw* | *-*-musl* )
++    *-*-darwin* | *-*-hpux* | *-*-cygwin* | *-*-mingw* | *-*-musl* | *-*-urchin* )
+ 
+ $as_echo "#define GTHREAD_USE_WEAK 0" >>confdefs.h
+ 
+diff --git a/libgm2/configure.host b/libgm2/configure.host
+index 2806fd687..f01b1dc05 100644
+--- a/libgm2/configure.host
++++ b/libgm2/configure.host
+@@ -255,7 +255,7 @@ case "${host_os}" in
+   freebsd*)
+     os_include_dir="os/bsd/freebsd"
+     ;;
+-  linux-musl*)
++  linux-musl*|linux-urchin*)
+     os_include_dir="os/generic"
+     ;;
+   gnu* | linux* | kfreebsd*-gnu | uclinux*)
+diff --git a/libgo/go/cmd/go/internal/bug/bug.go b/libgo/go/cmd/go/internal/bug/bug.go
+index 702dc2a14..eb69b9592 100644
+--- a/libgo/go/cmd/go/internal/bug/bug.go
++++ b/libgo/go/cmd/go/internal/bug/bug.go
+@@ -213,8 +213,8 @@ func printGlibcVersion(w io.Writer) {
+ 	}
+ 	fmt.Fprintf(w, "%s: %s\n", m[1], firstLine(out))
+ 
+-	// print another line (the one containing version string) in case of musl libc
+-	if idx := bytes.IndexByte(out, '\n'); bytes.Index(out, []byte("musl")) != -1 && idx > -1 {
++	// print another line (the one containing version string) in case of musl/urchin libc
++	if idx := bytes.IndexByte(out, '\n'); bytes.Index(out, []byte("musl")) != -1 || bytes.Index(out, []byte("urchin")) != -1 && idx > -1 {
+ 		fmt.Fprintf(w, "%s\n", firstLine(out[idx+1:]))
+ 	}
+ }
+diff --git a/libitm/configure.tgt b/libitm/configure.tgt
+index a8276f05d..e8c0e3fc7 100644
+--- a/libitm/configure.tgt
++++ b/libitm/configure.tgt
+@@ -31,7 +31,7 @@
+ if test "$gcc_cv_have_tls" = yes ; then
+   case "${target}" in
+ 
+-    *-*-musl*)
++    *-*-musl*|*-*-urchin*)
+ 	;;
+ 
+     # For x86, we use slots in the TCB head for most of our TLS.
+diff --git a/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc b/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc
+index 607ecae68..808dae015 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc
++++ b/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc
+@@ -127,7 +127,7 @@ extern const short *_toupper_tab_;
+ extern const short *_tolower_tab_;
+ #endif
+ 
+-#if SANITIZER_MUSL && \
++#if (SANITIZER_MUSL || SANITIZER_URCHIN) && \
+   (defined(__i386__) || defined(__arm__) || SANITIZER_MIPS32 || SANITIZER_PPC32)
+ // musl 1.2.0 on existing 32-bit architectures uses new symbol names for the
+ // time-related functions that take 64-bit time_t values.  See
+diff --git a/libsanitizer/sanitizer_common/sanitizer_platform.h b/libsanitizer/sanitizer_common/sanitizer_platform.h
+index 3e1b078a0..8cf8114d1 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_platform.h
++++ b/libsanitizer/sanitizer_common/sanitizer_platform.h
+@@ -130,12 +130,18 @@
+ #endif
+ 
+ // Assume linux that is not glibc or android is musl libc.
+-#if SANITIZER_LINUX && !SANITIZER_GLIBC && !SANITIZER_ANDROID
++#if SANITIZER_LINUX && !SANITIZER_GLIBC && !SANITIZER_ANDROID && !SANITIZER_URCHIN
+ #  define SANITIZER_MUSL 1
+ #else
+ #  define SANITIZER_MUSL 0
+ #endif
+ 
++#if SANITIZER_LINUX && !SANITIZER_GLIBC && !SANITIZER_ANDROID && !SANITIZER_MUSL
++#  define SANITIZER_URCHIN 1
++#else
++#  define SANITIZER_URCHIN 0
++#endif
++
+ #define SANITIZER_POSIX                                     \
+   (SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_APPLE || \
+    SANITIZER_NETBSD || SANITIZER_SOLARIS)
+diff --git a/libstdc++-v3/configure.host b/libstdc++-v3/configure.host
+index 7bc430716..000571ecf 100644
+--- a/libstdc++-v3/configure.host
++++ b/libstdc++-v3/configure.host
+@@ -255,7 +255,7 @@ case "${host_os}" in
+   freebsd*)
+     os_include_dir="os/bsd/freebsd"
+     ;;
+-  linux-musl*)
++  linux-musl*|linux-urchin)
+     os_include_dir="os/generic"
+     ;;
+   gnu* | linux* | kfreebsd*-gnu | uclinux*)
