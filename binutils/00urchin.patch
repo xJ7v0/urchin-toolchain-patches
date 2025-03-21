@@ -1,0 +1,204 @@
+diff --git a/config.guess b/config.guess
+index 48a68460..4c0711d5 100755
+--- a/config.guess
++++ b/config.guess
+@@ -171,7 +171,7 @@ Linux|GNU|GNU/*)
+ 	#include <stdarg.h>
+ 	/* First heuristic to detect musl libc.  */
+ 	#ifdef __DEFINED_va_list
+-	LIBC=musl
++	LIBC=urchin
+ 	#endif
+ 	#endif
+ 	#endif
+@@ -182,8 +182,8 @@ Linux|GNU|GNU/*)
+ 	# Second heuristic to detect musl libc.
+ 	if [ "$LIBC" = unknown ] &&
+ 	   command -v ldd >/dev/null &&
+-	   ldd --version 2>&1 | grep -q ^musl; then
+-		LIBC=musl
++	   ldd --version 2>&1 | grep -q ^urchin; then
++		LIBC=urchin
+ 	fi
+ 
+ 	# If the system lacks a compiler, then just pick glibc.
+diff --git a/config.sub b/config.sub
+index 4aaae46f..64c02039 100755
+--- a/config.sub
++++ b/config.sub
+@@ -1951,7 +1951,7 @@ fi
+ 
+ case $os in
+ 	# Sometimes we do "kernel-libc", so those need to count as OSes.
+-	llvm* | musl* | newlib* | relibc* | uclibc*)
++	llvm* | musl* | urchin* | newlib* | relibc* | uclibc*)
+ 		;;
+ 	# Likewise for "kernel-abi"
+ 	eabi* | gnueabi*)
+@@ -2209,7 +2209,7 @@ esac
+ # (given a valid OS), if there is a kernel.
+ case $kernel-$os-$obj in
+ 	linux-gnu*- | linux-android*- | linux-dietlibc*- | linux-llvm*- \
+-		    | linux-mlibc*- | linux-musl*- | linux-newlib*- \
++		    | linux-mlibc*- | linux-musl*- | linux-urchin*- | linux-newlib*- \
+ 		    | linux-relibc*- | linux-uclibc*- | linux-ohos*- )
+ 		;;
+ 	uclinux-uclibc*- | uclinux-gnu*- )
+@@ -2218,7 +2218,7 @@ case $kernel-$os-$obj in
+ 		;;
+ 	windows*-msvc*-)
+ 		;;
+-	-dietlibc*- | -llvm*- | -mlibc*- | -musl*- | -newlib*- | -relibc*- \
++	-dietlibc*- | -llvm*- | -mlibc*- | -musl*- | -urchin*- | -newlib*- | -relibc*- \
+ 		    | -uclibc*- )
+ 		# These are just libc implementations, not actual OSes, and thus
+ 		# require a kernel.
+diff --git a/configure b/configure
+index bbfb5979..249989e9 100755
+--- a/configure
++++ b/configure
+@@ -3151,7 +3151,8 @@ fi
+ 
+ if test "$enable_gprofng" = "yes"; then
+   case "${target}" in
+-    *-musl*)
++    *-musl*);;
++    *-urchin*)
+       ;;
+     x86_64-*-linux* | i?86-*-linux* | aarch64-*-linux* | riscv64-*-linux*)
+     configdirs="$configdirs gprofng"
+diff --git a/gprofng/common/config.h.in b/gprofng/common/config.h.in
+index f8484f23..ed6261fd 100644
+--- a/gprofng/common/config.h.in
++++ b/gprofng/common/config.h.in
+@@ -120,4 +120,4 @@
+ #undef _POSIX_SOURCE
+ 
+ /* Build with musl-libc. */
+-#undef __MUSL_LIBC
++#undef __URCHIN_LIBC
+diff --git a/gprofng/common/gp-defs.h b/gprofng/common/gp-defs.h
+index d6c94457..c7492d82 100644
+--- a/gprofng/common/gp-defs.h
++++ b/gprofng/common/gp-defs.h
+@@ -66,7 +66,7 @@
+ # endif
+ #endif
+ 
+-#if defined(__MUSL_LIBC)
++#if defined(__MUSL_LIBC) ||  defined(__URCHIN_LIBC)
+ #define ino64_t ino_t
+ #define off64_t off_t
+ #define fpos64_t fpos_t
+diff --git a/gprofng/configure b/gprofng/configure
+index 32dbb413..0dbe77bb 100755
+--- a/gprofng/configure
++++ b/gprofng/configure
+@@ -16665,7 +16665,7 @@ LIBC=gnu
+ #include <stdarg.h>
+ /* First heuristic to detect musl libc.  */
+ #ifdef __DEFINED_va_list
+-LIBC=musl
++LIBC=urchin
+ #else
+ LIBC=gnu
+ #endif
+@@ -16673,9 +16673,9 @@ LIBC=gnu
+ EOF
+ cc_set_libc=`$CC -E "dummy.c" 2>/dev/null | grep '^LIBC=' | sed 's, ,,g'`
+ eval "$cc_set_libc"
+-if test "$LIBC" = musl; then
++if test "$LIBC" = urchin; then
+ 
+-$as_echo "#define __MUSL_LIBC 1" >>confdefs.h
++$as_echo "#define __URCHIN_LIBC 1" >>confdefs.h
+ 
+ fi
+ rm -f dummy.c
+diff --git a/gprofng/libcollector/collector.h b/gprofng/libcollector/collector.h
+index d2226b22..1b82e969 100644
+--- a/gprofng/libcollector/collector.h
++++ b/gprofng/libcollector/collector.h
+@@ -43,7 +43,7 @@
+ # define SYMVER_ATTRIBUTE(sym, symver)  __asm__(".symver " #sym "," #symver);
+ #endif
+ 
+-#if defined(__MUSL_LIBC)
++#if defined(__MUSL_LIBC) || defined(__URCHIN_LIBC)
+ #define dlvsym(f, nm, v)  dlsym (f, nm)
+ #define SIGEV_THREAD_ID   4
+ #define DCL_FUNC_VER(REAL_DCL, sym, ver)
+diff --git a/gprofng/libcollector/dispatcher.c b/gprofng/libcollector/dispatcher.c
+index adac1dd6..f8596eb1 100644
+--- a/gprofng/libcollector/dispatcher.c
++++ b/gprofng/libcollector/dispatcher.c
+@@ -597,7 +597,7 @@ collector_timer_create (timer_t * ptimerid)
+   sigev.sigev_notify = SIGEV_THREAD_ID | SIGEV_SIGNAL;
+   sigev.sigev_signo = SIGPROF;
+   sigev.sigev_value.sival_ptr = ptimerid;
+-#if !defined(__MUSL_LIBC)
++#if !defined(__MUSL_LIBC) || !defined(__URCHIN_LIBC)
+   sigev._sigev_un._tid = __collector_gettid ();
+ #endif
+   if (CALL_REAL (timer_create)(CLOCK_THREAD_CPUTIME_ID, &sigev, ptimerid) == -1)
+diff --git a/gprofng/libcollector/iotrace.c b/gprofng/libcollector/iotrace.c
+index d82ba20a..9d96898d 100644
+--- a/gprofng/libcollector/iotrace.c
++++ b/gprofng/libcollector/iotrace.c
+@@ -2128,7 +2128,7 @@ DCL_PREAD (pread)
+ 
+ /*------------------------------------------------------------- pwrite */
+ 
+-#if !defined(__MUSL_LIBC)
++#if !defined(__MUSL_LIBC) || !defined(__URCHIN_LIBC)
+ // map interposed symbol versions
+ 
+ SYMVER_ATTRIBUTE (__collector_pwrite_2_2, pwrite@GLIBC_2.2)
+@@ -2177,7 +2177,7 @@ pwrite (int fildes, const void *buf, size_t nbyte, off_t offset)
+ 
+ /*------------------------------------------------------------- pwrite64 */
+ #if WSIZE(32) && !defined(__USE_FILE_OFFSET64)
+-#if !defined(__MUSL_LIBC)
++#if !defined(__MUSL_LIBC) || !defined(__URCHIN_LIBC)
+ // map interposed symbol versions
+ 
+ SYMVER_ATTRIBUTE (__collector_pwrite64_2_2, pwrite64@GLIBC_2.2)
+diff --git a/gprofng/libcollector/mmaptrace.c b/gprofng/libcollector/mmaptrace.c
+index 486c87ef..3ed62445 100644
+--- a/gprofng/libcollector/mmaptrace.c
++++ b/gprofng/libcollector/mmaptrace.c
+@@ -470,7 +470,7 @@ dlopen_searchpath (void*(real_dlopen) (const char *, int),
+       TprintfT (0, "ERROR: dlopen(%s,NOLOAD): %s\n", dl_info.dli_fname, dlerror ());
+       return NULL;
+     }
+-#if !defined(__MUSL_LIBC)
++#if !defined(__MUSL_LIBC) || !defined(__URCHIN_LIBC)
+   Dl_serinfo _info, *info = &_info;
+   Dl_serpath *path;
+ 
+diff --git a/gprofng/libcollector/unwind.c b/gprofng/libcollector/unwind.c
+index 45e16c05..18eb1c92 100644
+--- a/gprofng/libcollector/unwind.c
++++ b/gprofng/libcollector/unwind.c
+@@ -230,7 +230,7 @@ memory_error_func (int status ATTRIBUTE_UNUSED, bfd_vma addr ATTRIBUTE_UNUSED,
+ 	}
+ 
+ #elif ARCH(Aarch64)
+-#if defined(__MUSL_LIBC)
++#if defined(__MUSL_LIBC) || defined(__MUSL_LIBC)
+ typedef uint64_t __u64;
+ #endif
+ 
+diff --git a/gprofng/src/util.h b/gprofng/src/util.h
+index 3c2b04d8..0f350500 100644
+--- a/gprofng/src/util.h
++++ b/gprofng/src/util.h
+@@ -141,7 +141,7 @@ timestruc2hr (timestruc_t *s)
+   return (hrtime_t) s->tv_sec * NANOSEC + (hrtime_t) s->tv_nsec;
+ }
+ 
+-#if defined(__MUSL_LIBC)
++#if defined(__URCHIN_LIBC)
+ typedef struct stat dbe_stat_t;
+ #define fstat64 fstat
+ #define open64 open
