@@ -13,7 +13,7 @@ index df90720b7..bde9b7883 100755
  	#  THEN create a no-op fixer and exit
  	(echo "#! /bin/sh" ; echo "exit 0" ) > ${target}
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index a3566f5c7..78e3dfa3e 100644
+index a3566f5c7..214bea499 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
 @@ -693,7 +693,7 @@ case ${target} in
@@ -59,7 +59,7 @@ index a3566f5c7..78e3dfa3e 100644
  # resolver attribute.
  case ${target} in
 -*-*-linux*android*|*-*-linux*uclibc*|*-*-linux*musl*)
-+*-*-linux*android*|*-*-linux*uclibc*|*-*-linux*musl*|*-*-linux*musl*)
++*-*-linux*android*|*-*-linux*uclibc*|*-*-linux*musl*|*-*-linux*urchin*)
          ;;
  *-*-kfreebsd*-gnu | *-*-kopensolaris*-gnu)
          ;;
@@ -418,7 +418,7 @@ index a7248ac90..0d469ba3c 100644
  /* This is a *uclinux* target.  We don't define below macros to normal linux
     versions, because doing so would require *uclinux* targets to include
 diff --git a/gcc/config/linux.opt b/gcc/config/linux.opt
-index 31f334e9b..b3621dcb8 100644
+index 31f334e9b..c7e8df69c 100644
 --- a/gcc/config/linux.opt
 +++ b/gcc/config/linux.opt
 @@ -32,5 +32,9 @@ Target RejectNegative Var(linux_libc,LIBC_UCLIBC) Negative(mmusl)
@@ -427,11 +427,11 @@ index 31f334e9b..b3621dcb8 100644
  mmusl
 -Target RejectNegative Var(linux_libc,LIBC_MUSL) Negative(mbionic)
 +Target RejectNegative Var(linux_libc,LIBC_MUSL) Negative(murchin)
-+Use musl C library.
+ Use musl C library.
 +
 +murchin
 +Target RejectNegative Var(linux_libc,LIBC_URCHIN) Negative(mbionic)
- Use musl C library.
++Use urchin C library.
 diff --git a/gcc/config/t-urchin b/gcc/config/t-urchin
 new file mode 100644
 index 000000000..ad3e95ab6
@@ -562,6 +562,30 @@ index e19466438..8f5d52bca 100644
              case "CRuntime_Newlib":
              case "CRuntime_UClibc":
              case "CRuntime_WASI":
+diff --git a/gcc/d/dmd/target.d b/gcc/d/dmd/target.d
+index cff1d2e9b..c4465faf0 100644
+--- a/gcc/d/dmd/target.d
++++ b/gcc/d/dmd/target.d
+@@ -305,6 +305,7 @@ struct TargetC
+         Glibc,
+         Microsoft,
+         Musl,
++        Urchin,
+         Newlib,
+         UClibc,
+         WASI,
+diff --git a/gcc/d/dmd/target.h b/gcc/d/dmd/target.h
+index 120950570..ee25b40af 100644
+--- a/gcc/d/dmd/target.h
++++ b/gcc/d/dmd/target.h
+@@ -54,6 +54,7 @@ struct TargetC
+         Glibc,
+         Microsoft,
+         Musl,
++        Urchin,
+         Newlib,
+         UClibc,
+         WASI,
 diff --git a/gcc/d/implement-d.texi b/gcc/d/implement-d.texi
 index 770189caf..02f6a9fbb 100644
 --- a/gcc/d/implement-d.texi
@@ -814,6 +838,19 @@ index 82e6996ab..1daa010fb 100644
  		if GOOS == "linux" && (i == 32 || i == 33 || i == 34) {
  			return _SIG_DFL
  		}
+diff --git a/libgomp/configure.tgt b/libgomp/configure.tgt
+index 46af75f97..df250ae68 100644
+--- a/libgomp/configure.tgt
++++ b/libgomp/configure.tgt
+@@ -19,7 +19,7 @@ if test $gcc_cv_have_tls = yes ; then
+     *-*-k*bsd*-gnu*)
+ 	;;
+ 
+-    *-*-musl*)
++    *-*-musl*|*-*-urchin*)
+ 	;;
+ 
+     *-*-linux* | *-*-gnu*)
 diff --git a/libitm/configure.tgt b/libitm/configure.tgt
 index a8276f05d..e8c0e3fc7 100644
 --- a/libitm/configure.tgt
@@ -4061,6 +4098,23 @@ index 40dc85420..d4fec82b1 100644
          // To provide a consistent behavior cross platform, we use the glibc check
          // See also https://issues.dlang.org/show_bug.cgi?id=19797
          enforce(origin == SEEK_SET || origin == SEEK_CUR ||  origin == SEEK_END,
+diff --git a/libphobos/testsuite/libphobos.shared/load_13414.d b/libphobos/testsuite/libphobos.shared/load_13414.d
+index 047d50799..eab5b79b6 100644
+--- a/libphobos/testsuite/libphobos.shared/load_13414.d
++++ b/libphobos/testsuite/libphobos.shared/load_13414.d
+@@ -22,6 +22,12 @@ void runTest(string name)
+         assert(tlsDtor == 0);
+         assert(dtor == 0);
+     }
++    else version (CRuntime_Urchin)
++    {
++        // On Urchin, unloadLibrary is a no-op because dlclose is a no-op
++        assert(tlsDtor == 0);
++        assert(dtor == 0);
++    }
+     else
+     {
+         assert(tlsDtor == 1);
 diff --git a/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc b/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc
 index 607ecae68..808dae015 100644
 --- a/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc
