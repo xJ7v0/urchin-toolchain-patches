@@ -240,7 +240,7 @@ index e38361cde..976674fcf 100644
    if (OPTION_BIONIC)
      if (fn_class == function_c94
 diff --git a/gcc/config/linux.h b/gcc/config/linux.h
-index a7248ac90..a58741d0e 100644
+index a7248ac90..0d469ba3c 100644
 --- a/gcc/config/linux.h
 +++ b/gcc/config/linux.h
 @@ -33,19 +33,25 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
@@ -255,7 +255,7 @@ index a7248ac90..a58741d0e 100644
  #define OPTION_UCLIBC_P(opts)	((opts)->x_linux_libc == LIBC_UCLIBC)
  #define OPTION_BIONIC_P(opts)	((opts)->x_linux_libc == LIBC_BIONIC)
  #undef OPTION_MUSL_P
-+#undef OPTION_URCHINL_P
++#undef OPTION_URCHIN_P
  #define OPTION_MUSL_P(opts)	((opts)->x_linux_libc == LIBC_MUSL)
 +#define OPTION_URCHIN_P(opts)	((opts)->x_linux_libc == LIBC_URCHIN)
  #endif
