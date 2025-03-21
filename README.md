@@ -12,5 +12,6 @@ Or if using gentoo with crossdev
 
 mkdir -p /etc/portage/patches/cross-x86_64-unknown-linux-urchin/{binutils,gcc}
 
-sudo cp binutils/00urchin.patch /etc/portage/patches/cross-x86_64-unknown-linux-urchin//binutils/
-sudo cp gcc/00urchin.patch /etc/portage/patches/cross-x86_64-unknown-linux-urchin//gcc/
+sudo cp binutils/00urchin.patch /etc/portage/patches/cross-x86_64-unknown-linux-urchin/binutils/
+
+sudo cp gcc/00urchin.patch /etc/portage/patches/cross-x86_64-unknown-linux-urchin/gcc/
